@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  IMAGE: ghcr.io/harshit-patel-7/task-manager
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -24,12 +27,25 @@ jobs:
       - name: Run tests
         run: pytest -v
 
-  build:
+  build-and-push:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Check out the code
         uses: actions/checkout@v4
 
       - name: Build the Docker image
-        run: docker build -t task-manager:${{ github.sha }} .
+        run: docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push the image
+        if: github.event_name == 'push'
+        run: |
+          docker push $IMAGE:${{ github.sha }}
+          docker push $IMAGE:latest
