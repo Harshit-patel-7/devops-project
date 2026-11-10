@@ -49,3 +49,25 @@ jobs:
         run: |
           docker push $IMAGE:${{ github.sha }}
           docker push $IMAGE:latest
+  deploy-test:
+    needs: build-and-push
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Create a temporary Kubernetes cluster
+        uses: helm/kind-action@v1
+
+      - name: Deploy the manifests
+        run: |
+          kubectl apply -f k8s/
+          kubectl set image deployment/task-manager task-manager=$IMAGE:${{ github.sha }}
+          kubectl rollout status deployment/task-manager --timeout=120s
+
+      - name: Smoke test the running app
+        run: |
+          kubectl port-forward service/task-manager-service 8080:8080 &
+          sleep 5
+          curl --fail --retry 5 --retry-delay 3 http://localhost:8080/health
