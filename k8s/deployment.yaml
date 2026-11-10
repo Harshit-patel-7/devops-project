@@ -19,10 +19,17 @@ spec:
             - containerPort: 5000
           env:
             - name: APP_VERSION
-              value: "k8s-1.0"
+              value: "k8s-2.0"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: password
+            - name: DATABASE_URL
+              value: "postgresql://taskuser:$(POSTGRES_PASSWORD)@postgres:5432/tasks"
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: 5000
             initialDelaySeconds: 3
             periodSeconds: 5
@@ -30,12 +37,12 @@ spec:
             httpGet:
               path: /health
               port: 5000
-            initialDelaySeconds: 10
+            initialDelaySeconds: 15
             periodSeconds: 10
           resources:
             requests:
               cpu: "50m"
-              memory: "64Mi"
+              memory: "96Mi"
             limits:
               cpu: "250m"
-              memory: "128Mi"
+              memory: "256Mi"

@@ -60,14 +60,28 @@ jobs:
       - name: Create a temporary Kubernetes cluster
         uses: helm/kind-action@v1
 
-      - name: Deploy the manifests
+      - name: Create the database password Secret
+        run: kubectl create secret generic postgres-secret --from-literal=password=$(openssl rand -hex 12)
+
+      - name: Deploy the database and the app
         run: |
           kubectl apply -f k8s/
+          kubectl rollout status statefulset/postgres --timeout=180s
           kubectl set image deployment/task-manager task-manager=$IMAGE:${{ github.sha }}
-          kubectl rollout status deployment/task-manager --timeout=120s
+          kubectl rollout status deployment/task-manager --timeout=180s
 
       - name: Smoke test the running app
         run: |
           kubectl port-forward service/task-manager-service 8080:8080 &
           sleep 5
-          curl --fail --retry 5 --retry-delay 3 http://localhost:8080/health
+          curl --fail --retry 5 --retry-delay 3 --retry-connrefused http://localhost:8080/health
+          curl --fail http://localhost:8080/ready
+          curl --fail -X POST -H "Content-Type: application/json" -d '{"title":"CI smoke test"}' http://localhost:8080/api/tasks
+          curl --fail http://localhost:8080/api/stats
+
+      - name: Show cluster details if something failed
+        if: failure()
+        run: |
+          kubectl get pods
+          kubectl describe pods
+          kubectl logs deployment/task-manager --all-containers=true
