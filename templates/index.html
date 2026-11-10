@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task Manager</title>
+<script>
+  (function () {
+    var theme = null;
+    try { theme = localStorage.getItem('theme'); } catch (e) {}
+    if (!theme) {
+      theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    document.documentElement.setAttribute('data-theme', theme);
+  })();
+</script>
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #f2f4f1;
+    --surface: #ffffff;
+    --ink: #17212b;
+    --muted: #5c6b78;
+    --line: #dce2de;
+    --accent: #0e7c6b;
+    --on-accent: #ffffff;
+    --high: #b42318;
+    --medium: #b54708;
+    --low: #2f7d4f;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #0f1720;
+    --surface: #17222d;
+    --ink: #e6ecef;
+    --muted: #93a3af;
+    --line: #26343f;
+    --accent: #4fd1b5;
+    --on-accent: #0b1a17;
+    --high: #f97066;
+    --medium: #fdb022;
+    --low: #6ce9a6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 16px 48px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 1.75rem; letter-spacing: -0.02em; }
+
+  button, input, select { font: inherit; color: inherit; }
+  button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .btn {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    padding: 7px 13px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+  .btn.quiet { border-color: transparent; background: transparent; color: var(--muted); padding: 6px 8px; }
+  .btn.quiet:hover { color: var(--ink); }
+  .btn.quiet.danger:hover { color: var(--high); }
+  input[type="text"], input[type="search"], input[type="date"], select {
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    min-width: 0;
+  }
+
+  .summary { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .summary-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  #headline { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+  #sub { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .track { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; margin: 14px 0; }
+  #bar { height: 100%; width: 0; background: var(--accent); transition: width 0.3s ease; }
+  .facts { display: flex; gap: 20px; flex-wrap: wrap; color: var(--muted); font-size: 0.9rem; }
+  .facts b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .facts .bad b { color: var(--high); }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .grow { flex: 1 1 180px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; padding: 7px 12px; cursor: pointer; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+
+  .task {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .task input[type="checkbox"] { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--accent); cursor: pointer; }
+  .task .info { flex: 1; min-width: 0; }
+  .task .title { font-weight: 600; overflow-wrap: anywhere; }
+  .task.done .title { text-decoration: line-through; color: var(--muted); font-weight: 400; }
+  .meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+  .prio::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--medium); }
+  .prio.high::before { background: var(--high); }
+  .prio.low::before { background: var(--low); }
+  .overdue { color: var(--high); font-weight: 600; }
+  .actions { display: flex; gap: 2px; }
+  .empty { text-align: center; color: var(--muted); padding: 32px 12px; }
+
+  footer { margin-top: 28px; font-size: 0.8rem; color: var(--muted); text-align: center; }
+
+  dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); width: min(420px, 92vw); padding: 20px; }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+  dialog h2 { margin: 0 0 8px; font-size: 1.15rem; }
+  dialog label { display: block; font-size: 0.85rem; color: var(--muted); margin: 12px 0 4px; }
+  dialog input, dialog select { width: 100%; }
+
+  @media (prefers-reduced-motion: reduce) { #bar { transition: none; } }
+  @media (max-width: 520px) { .task { flex-wrap: wrap; } .actions { margin-left: 30px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Task Manager</h1>
+    <button class="btn" id="themeBtn" type="button">Dark mode</button>
+  </header>
+
+  <section class="summary" aria-label="Progress summary">
+    <div class="summary-top">
+      <p id="headline">Loading...</p>
+      <span id="sub"></span>
+    </div>
+    <div class="track" role="progressbar" aria-label="Completed tasks" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="track">
+      <div id="bar"></div>
+    </div>
+    <div class="facts" id="facts"></div>
+  </section>
+
+  <section class="panel" aria-label="Add a task">
+    <div class="row">
+      <input class="grow" type="text" id="title" placeholder="What needs doing?" maxlength="200" aria-label="Task title">
+      <select id="priority" aria-label="Priority">
+        <option value="low">Low priority</option>
+        <option value="medium" selected>Medium priority</option>
+        <option value="high">High priority</option>
+      </select>
+      <input type="text" id="category" value="General" maxlength="50" aria-label="Category" style="width: 120px">
+      <input type="date" id="due" aria-label="Due date">
+      <button class="btn primary" id="addBtn" type="button">Add task</button>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Find tasks">
+    <div class="row">
+      <input class="grow" type="search" id="search" placeholder="Search tasks" aria-label="Search tasks">
+      <div class="seg" id="statusSeg">
+        <button type="button" data-status="" aria-pressed="true">All</button>
+        <button type="button" data-status="pending" aria-pressed="false">Pending</button>
+        <button type="button" data-status="done" aria-pressed="false">Done</button>
+      </div>
+      <select id="fPriority" aria-label="Filter by priority">
+        <option value="">Any priority</option>
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low</option>
+      </select>
+      <select id="fCategory" aria-label="Filter by category">
+        <option value="">All categories</option>
+      </select>
+      <button class="btn quiet danger" id="clearBtn" type="button">Clear completed</button>
+    </div>
+  </section>
+
+  <div id="list" aria-live="polite"></div>
+
+  <footer>Version {{ version }} | Served by: {{ host }}</footer>
+</div>
+
+<dialog id="editDlg">
+  <h2>Edit task</h2>
+  <label for="eTitle">Title</label>
+  <input type="text" id="eTitle" maxlength="200">
+  <label for="ePriority">Priority</label>
+  <select id="ePriority">
+    <option value="low">Low</option>
+    <option value="medium">Medium</option>
+    <option value="high">High</option>
+  </select>
+  <label for="eCategory">Category</label>
+  <input type="text" id="eCategory" maxlength="50">
+  <label for="eDue">Due date</label>
+  <input type="date" id="eDue">
+  <div class="row" style="margin-top: 18px; justify-content: flex-end">
+    <button class="btn" id="eCancel" type="button">Cancel</button>
+    <button class="btn primary" id="eSave" type="button">Save changes</button>
+  </div>
+</dialog>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let current = [];
+  let editingId = null;
+  let statusFilter = '';
+
+  function esc(value) {
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return String(value).replace(/[&<>"']/g, (c) => map[c]);
+  }
+
+  async function api(url, method, body) {
+    const options = { method: method || 'GET', headers: {} };
+    if (body !== undefined) {
+      options.headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(body);
+    }
+    const res = await fetch(url, options);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data.error || 'Something went wrong. Please try again.');
+      throw new Error(data.error || 'request failed');
+    }
+    return data;
+  }
+
+  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+
+  async function loadStats() {
+    const s = await api('/api/stats');
+    if (s.total === 0) {
+      $('headline').textContent = 'Nothing planned yet';
+    } else if (s.pending === 0) {
+      $('headline').textContent = 'Everything is done';
+    } else {
+      $('headline').textContent = plural(s.pending, 'task') + ' left';
+    }
+    $('sub').textContent = s.completed + ' of ' + s.total + ' completed';
+    const pct = s.total ? Math.round((100 * s.completed) / s.total) : 0;
+    $('bar').style.width = pct + '%';
+    $('track').setAttribute('aria-valuenow', String(pct));
+    $('facts').innerHTML =
+      '<span class="' + (s.overdue ? 'bad' : '') + '"><b>' + s.overdue + '</b> overdue</span>' +
+      '<span><b>' + s.high_pending + '</b> high priority pending</span>' +
+      '<span><b>' + s.categories.length + '</b> ' + (s.categories.length === 1 ? 'category' : 'categories') + '</span>';
+
+    const select = $('fCategory');
+    const selected = select.value;
+    select.innerHTML = '<option value="">All categories</option>' +
+      s.categories.map((c) => '<option value="' + esc(c) + '">' + esc(c) + '</option>').join('');
+    select.value = selected;
+  }
+
+  function renderTask(t) {
+    const due = t.due_date
+      ? '<span class="' + (t.overdue ? 'overdue' : '') + '">Due ' + esc(t.due_date) + (t.overdue ? ' (overdue)' : '') + '</span>'
+      : '';
+    return '<div class="task ' + (t.done ? 'done' : '') + '" data-id="' + t.id + '">' +
+      '<input type="checkbox" data-action="toggle" aria-label="Mark done" ' + (t.done ? 'checked' : '') + '>' +
+      '<div class="info">' +
+        '<div class="title">' + esc(t.title) + '</div>' +
+        '<div class="meta">' +
+          '<span class="prio ' + esc(t.priority) + '">' + esc(t.priority) + ' priority</span>' +
+          '<span>' + esc(t.category) + '</span>' + due +
+        '</div>' +
+      '</div>' +
+      '<div class="actions">' +
+        '<button class="btn quiet" type="button" data-action="edit">Edit</button>' +
+        '<button class="btn quiet danger" type="button" data-action="delete">Delete</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  async function loadTasks() {
+    const params = new URLSearchParams({
+      search: $('search').value,
+      status: statusFilter,
+      priority: $('fPriority').value,
+      category: $('fCategory').value,
+    });
+    current = await api('/api/tasks?' + params.toString());
+    $('list').innerHTML = current.length
+      ? current.map(renderTask).join('')
+      : '<div class="empty">No tasks match. Add one above or change the filters.</div>';
+  }
+
+  async function refresh() {
+    await loadStats();
+    await loadTasks();
+  }
+
+  $('addBtn').addEventListener('click', async () => {
+    const title = $('title').value.trim();
+    if (!title) { $('title').focus(); return; }
+    await api('/api/tasks', 'POST', {
+      title: title,
+      priority: $('priority').value,
+      category: $('category').value.trim() || 'General',
+      due_date: $('due').value || null,
+    });
+    $('title').value = '';
+    $('due').value = '';
+    $('title').focus();
+    refresh();
+  });
+  $('title').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('addBtn').click(); });
+
+  $('search').addEventListener('input', loadTasks);
+  $('fPriority').addEventListener('change', loadTasks);
+  $('fCategory').addEventListener('change', loadTasks);
+  $('statusSeg').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    statusFilter = btn.dataset.status;
+    document.querySelectorAll('#statusSeg button').forEach((b) => {
+      b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+    });
+    loadTasks();
+  });
+
+  $('clearBtn').addEventListener('click', async () => {
+    await api('/api/tasks/completed', 'DELETE');
+    refresh();
+  });
+
+  $('list').addEventListener('click', async (e) => {
+    const action = e.target.dataset.action;
+    if (!action) return;
+    const id = Number(e.target.closest('.task').dataset.id);
+    if (action === 'toggle') { await api('/api/tasks/' + id + '/toggle', 'PUT'); refresh(); }
+    if (action === 'delete') { await api('/api/tasks/' + id, 'DELETE'); refresh(); }
+    if (action === 'edit') openEdit(id);
+  });
+
+  function openEdit(id) {
+    const t = current.find((x) => x.id === id);
+    if (!t) return;
+    editingId = id;
+    $('eTitle').value = t.title;
+    $('ePriority').value = t.priority;
+    $('eCategory').value = t.category;
+    $('eDue').value = t.due_date || '';
+    $('editDlg').showModal();
+  }
+  $('eCancel').addEventListener('click', () => $('editDlg').close());
+  $('eSave').addEventListener('click', async () => {
+    await api('/api/tasks/' + editingId, 'PUT', {
+      title: $('eTitle').value,
+      priority: $('ePriority').value,
+      category: $('eCategory').value,
+      due_date: $('eDue').value || null,
+    });
+    $('editDlg').close();
+    refresh();
+  });
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    $('themeBtn').textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
+    try { localStorage.setItem('theme', theme); } catch (e) {}
+  }
+  $('themeBtn').addEventListener('click', () => {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+  applyTheme(document.documentElement.getAttribute('data-theme'));
+
+  refresh();
+</script>
+</body>
+</html>
